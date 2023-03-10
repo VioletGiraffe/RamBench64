@@ -1,0 +1,8 @@
+.qtc_clangd/
+.qmake.stash
+bin/
+Makefile*
+*.pro.user
+.vs/
+*.sln
+*.vcxproj*
