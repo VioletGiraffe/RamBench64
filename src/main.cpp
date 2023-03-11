@@ -26,7 +26,7 @@ inline void* malloc_aligned(size_t size, size_t alignment) noexcept
 
 struct Bench {
 	explicit Bench(const size_t megabytes = 100) :
-		_taskSizeBytes{ megabytes  * 1024 * 1024 },
+		_taskSizeBytes{ megabytes * 1024 * 1024 },
 		_a{ reinterpret_cast<char8_t*>(malloc_aligned(_taskSizeBytes, 256 / 8)), &free_aligned },
 		_b{ reinterpret_cast<char8_t*>(malloc_aligned(_taskSizeBytes, 256 / 8)), &free_aligned }
 	{
@@ -40,7 +40,7 @@ struct Bench {
 
 		// A has even numbers, B - odd
 		uint64_t counter = 0;
-		for (auto* __restrict a = _a.get(), *__restrict b = _b.get(), *end = a + _taskSizeBytes; a != end; a += sizeof(size_t), b += sizeof(size_t))
+		for (auto* __restrict a = _a.get(), *__restrict b = _b.get(), *end = a + _taskSizeBytes; a != end; a += sizeof(uint64_t), b += sizeof(uint64_t))
 		{
 			::memcpy(a, &counter, sizeof(counter));
 			++counter;
@@ -77,7 +77,11 @@ struct Bench {
 		_result = sum256[0] + sum256[1] + sum256[2] + sum256[3];
 #endif
 
-	
+		// Verifying the result. The formula for sum of all consecutive numbers 1..N is n * (n + 1) / 2
+		const uint64_t N = _taskSizeBytes / sizeof(uint64_t) * 2 - 1 /* there is 0 */;
+		const uint64_t expectedSum = N * (N + 1) / 2;
+		if (expectedSum != _result)
+			throw std::exception("Result verification failed! Memory error or CPU instability?");
 
 		if (us == 0)
 			return 0;
@@ -106,7 +110,17 @@ struct Bench {
 		const auto endTime = std::chrono::high_resolution_clock::now();
 		const auto us = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
 
+#ifdef _WIN32
 		_result = sum.m128i_u64[0] + sum.m128i_u64[1];
+#else
+		_result = sum[0] + sum[1];
+#endif
+
+		// Verifying the result. The formula for sum of all consecutive numbers 1..N is n * (n + 1) / 2
+		const uint64_t N = _taskSizeBytes / sizeof(uint64_t) * 2 - 1 /* there is 0 */;
+		const uint64_t expectedSum = N * (N + 1) / 2;
+		if (expectedSum != _result)
+			throw std::exception("Result verification failed! Memory error or CPU instability?");
 
 		if (us == 0)
 			return 0;
@@ -237,7 +251,7 @@ struct Bench {
 		return _taskSizeBytes / (1024 * 1024);
 	}
 
-	auto result() const noexcept
+	uint64_t result() const noexcept
 	{
 		return _result;
 	}
@@ -248,7 +262,7 @@ private:
 	std::unique_ptr<char8_t, decltype(&free_aligned)> _a;
 	std::unique_ptr<char8_t, decltype(&free_aligned)> _b;
 
-	size_t _result = 0;
+	uint64_t _result = 0;
 };
 
 int main()
