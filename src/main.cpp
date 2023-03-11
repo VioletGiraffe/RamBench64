@@ -1,10 +1,9 @@
 #include <chrono>
 #include <iostream>
 #include <memory>
-#include <numeric>
 #include <string.h>
 
-#include <intrin.h>
+#include <immintrin.h>
 
 struct Bench {
 	explicit Bench(const size_t megabytes = 100 * 1024 * 1024) noexcept :
@@ -16,14 +15,11 @@ struct Bench {
 		if (((size_t)_a.get()) % 32 != 0 || ((size_t)_b.get()) % 32 != 0)
 			::abort();
 
-		::memset(_a.get(), 0, megabytes); // Init the memory - probably not necessary before iota
-		::memset(_b.get(), 0, megabytes);
-
-		std::iota(_a.get(), _a.get() + _taskSize, 0);
-		std::iota(_b.get(), _b.get() + _taskSize, 0);
+		::memset(_a.get(), 0xE2, megabytes); // Init the memory - required for the OS to actually allocate all the pages!
+		::memset(_b.get(), 0x5F, megabytes);
 	}
 
-	size_t run() noexcept
+	size_t runReadBenchmark() noexcept
 	{
 		const auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -49,6 +45,28 @@ struct Bench {
 		return _taskSize * sizeof(size_t) * 2 /* A and B*/ * 1'000'000 / (1024 * 1024) / us;
 	}
 
+	size_t runWriteBenchmark() noexcept
+	{
+		const auto startTime = std::chrono::high_resolution_clock::now();
+
+		auto* aPtr = _a.get();
+		auto* bPtr = _b.get();
+
+		__m256i sum256 = _mm256_set1_epi64x(_result);
+		for (const auto* end = aPtr + _taskSize; aPtr != end; aPtr += 256 / 8, bPtr += 256 / 8)
+		{
+			_mm256_store_si256(reinterpret_cast<__m256i*>(aPtr), sum256);
+			_mm256_store_si256(reinterpret_cast<__m256i*>(bPtr), sum256);
+		}
+		const auto endTime = std::chrono::high_resolution_clock::now();
+		const auto us = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
+
+		if (us == 0)
+			return 0;
+
+		return _taskSize * sizeof(size_t) * 2 /* A and B*/ * 1'000'000 / (1024 * 1024) / us;
+	}
+
 	size_t taskSizeMib() const noexcept
 	{
 		return _taskSize * sizeof(size_t) / (1024 * 1024);
@@ -64,15 +82,15 @@ private:
 	std::unique_ptr<size_t[]> _b;
 
 	const size_t _taskSize;
-	size_t _result;
+	size_t _result = 0;
 };
 
 int main()
 {
 	Bench bench{1000 * 1024 * 1024};
 
-	const auto mibPerSecond = bench.run();
-	std::cout << "Processing " << bench.taskSizeMib() << "(x2) MiB: " << (float)mibPerSecond / 1024.0f << " GiB/s" << '\n';
+	std::cout << "Reading from RAM - " << bench.taskSizeMib() << "(x2) MiB: " << (float)bench.runReadBenchmark() / 1024.0f << " GiB/s" << '\n';
+	std::cout << "Writing to RAM - " << bench.taskSizeMib() << "(x2) MiB: " << (float)bench.runWriteBenchmark() / 1024.0f << " GiB/s" << '\n';
 
 	return bench.result() > 0 ? 0 : 1;
 }
