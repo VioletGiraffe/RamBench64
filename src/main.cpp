@@ -25,21 +25,32 @@ inline void* malloc_aligned(size_t size, size_t alignment) noexcept
 #endif
 
 struct Bench {
-	explicit Bench(const size_t megabytes = 100) noexcept :
+	explicit Bench(const size_t megabytes = 100) :
 		_taskSizeBytes{ megabytes  * 1024 * 1024 },
 		_a{ reinterpret_cast<char8_t*>(malloc_aligned(_taskSizeBytes, 256 / 8)), &free_aligned },
 		_b{ reinterpret_cast<char8_t*>(malloc_aligned(_taskSizeBytes, 256 / 8)), &free_aligned }
 	{
-		if (((size_t)_a.get()) % (256/8) != 0 || ((size_t)_b.get()) % (256 / 8) != 0)
-		{
-			::abort();
-		}
+		if (!_a || !_b)
+			throw std::exception("Failed to allocate memory!");
 
-		::memset(_a.get(), 0xE2, _taskSizeBytes); // Init the memory - required for the OS to actually allocate all the pages!
-		::memset(_b.get(), 0x5F, _taskSizeBytes);
+		if (((size_t)_a.get()) % (256 / 8) != 0 || ((size_t)_b.get()) % (256 / 8) != 0)
+			throw std::exception("Memory not aligned!");
+
+		// Init the memory - required for the OS to actually allocate all the pages!
+
+		// A has even numbers, B - odd
+		uint64_t counter = 0;
+		for (auto* __restrict a = _a.get(), *__restrict b = _b.get(), *end = a + _taskSizeBytes; a != end; a += sizeof(size_t), b += sizeof(size_t))
+		{
+			::memcpy(a, &counter, sizeof(counter));
+			++counter;
+
+			::memcpy(b, &counter, sizeof(counter));
+			++counter;
+		}
 	}
 
-	size_t runReadBenchmark() noexcept
+	size_t runReadBenchmark()
 	{
 		const auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -60,7 +71,13 @@ struct Bench {
 		const auto endTime = std::chrono::high_resolution_clock::now();
 		const auto us = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
 
+#ifdef _WIN32
 		_result = sum256.m256i_u64[0] + sum256.m256i_u64[1] + sum256.m256i_u64[2] + sum256.m256i_u64[3];
+#else
+		_result = sum256[0] + sum256[1] + sum256[2] + sum256[3];
+#endif
+
+	
 
 		if (us == 0)
 			return 0;
@@ -68,7 +85,7 @@ struct Bench {
 		return _taskSizeBytes * 2 /* A and B*/ * 1'000'000 / (1024 * 1024) / us;
 	}
 
-	size_t runReadBenchmarkSSE2() noexcept
+	size_t runReadBenchmarkSSE2()
 	{
 		const auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -97,7 +114,7 @@ struct Bench {
 		return _taskSizeBytes * 2 /* A and B*/ * 1'000'000 / (1024 * 1024) / us;
 	}
 
-	size_t runWriteBenchmark() noexcept
+	size_t runWriteBenchmark()
 	{
 		const auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -121,7 +138,7 @@ struct Bench {
 		return _taskSizeBytes * 2 /* A and B*/ * 1'000'000 / (1024 * 1024) / us;
 	}
 
-	size_t runWriteBenchmarkSSE2() noexcept
+	size_t runWriteBenchmarkSSE2()
 	{
 		const auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -145,7 +162,7 @@ struct Bench {
 		return _taskSizeBytes * 2 /* A and B*/ * 1'000'000 / (1024 * 1024) / us;
 	}
 
-	size_t runCopyBenchmark() noexcept
+	size_t runCopyBenchmark()
 	{
 		const auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -188,7 +205,7 @@ struct Bench {
 		return _taskSizeBytes * 2 /* A and B*/ * 1'000'000 / (1024 * 1024) / us;
 	}
 
-	size_t runCopyBenchmarkSSE2() noexcept
+	size_t runCopyBenchmarkSSE2()
 	{
 		const auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -236,21 +253,29 @@ private:
 
 int main()
 {
-	Bench bench{1000};
-	std::cout << "Task size: " << bench.taskSizeMib() << " MiB (x2)" << "\n\n";
-	std::cout << std::fixed << std::setprecision(1);
+	bool success = false;
+	try {
+		Bench bench{ 1000 };
+		std::cout << "Task size: " << bench.taskSizeMib() << " MiB (x2)" << "\n\n";
+		std::cout << std::fixed << std::setprecision(1);
 
-	std::cout << "----------------------------------------------" << '\n';
-	std::cout << "Read\t\t" << "Write\t\t" << "Copy\t\t" << '\n';
-	std::cout << "----------------------------------------------" << '\n';
-	std::cout << (float)bench.runReadBenchmark() / 1024.0f << " GiB/s\t";
-	std::cout << (float)bench.runWriteBenchmark() / 1024.0f << " GiB/s\t";
-	std::cout << (float)bench.runCopyBenchmark() / 1024.0f << " GiB/s\t";
-	std::cout << '\n';
-	std::cout << "----------------------------------------------" << '\n';
+		std::cout << "----------------------------------------------" << '\n';
+		std::cout << "Read\t\t" << "Write\t\t" << "Copy\t\t" << '\n';
+		std::cout << "----------------------------------------------" << '\n';
+		std::cout << (float)bench.runReadBenchmark() / 1024.0f << " GiB/s\t";
+		std::cout << (float)bench.runWriteBenchmark() / 1024.0f << " GiB/s\t";
+		std::cout << (float)bench.runCopyBenchmark() / 1024.0f << " GiB/s\t";
+		std::cout << '\n';
+		std::cout << "----------------------------------------------" << '\n';
+
+		success = true;
+	}
+	catch (const std::exception& e) {
+		std::cout << "!!! Error !!!\n" << e.what() << '\n';
+	}
 
 	std::cout << "\nPress Enter to exit...";
 	std::cin.get();
 
-	return bench.result() > 0 ? 0 : 1;
+	return success ? 0 : 1;
 }
