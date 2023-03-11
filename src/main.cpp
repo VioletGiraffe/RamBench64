@@ -37,17 +37,8 @@ struct Bench {
 			throw std::exception("Memory not aligned!");
 
 		// Init the memory - required for the OS to actually allocate all the pages!
-
-		// A has even numbers, B - odd
-		uint64_t counter = 0;
-		for (auto* __restrict a = _a.get(), *__restrict b = _b.get(), *end = a + _taskSizeBytes; a != end; a += sizeof(uint64_t), b += sizeof(uint64_t))
-		{
-			::memcpy(a, &counter, sizeof(counter));
-			++counter;
-
-			::memcpy(b, &counter, sizeof(counter));
-			++counter;
-		}
+		::memset(_a.get(), 0xAA, _taskSizeBytes);
+		::memset(_b.get(), 0xEE, _taskSizeBytes);
 	}
 
 	size_t runReadBenchmark()
@@ -104,8 +95,8 @@ struct Bench {
 			auto a128 = _mm_load_si128(reinterpret_cast<const __m128i*>(aPtr));
 			auto b128 = _mm_load_si128(reinterpret_cast<const __m128i*>(bPtr));
 
-			auto localSum = _mm_add_epi64(a128, b128);
-			sum = _mm_add_epi64(sum, localSum);
+			sum = _mm_add_epi64(sum, a128);
+			sum = _mm_add_epi64(sum, b128);
 		}
 		const auto endTime = std::chrono::high_resolution_clock::now();
 		const auto us = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
@@ -137,11 +128,17 @@ struct Bench {
 
 		static constexpr size_t stride = 256 / 8;
 
-		__m256i sum256 = _mm256_set1_epi64x(_result);
+		const __m256i inc = _mm256_set1_epi64x(8);
+
+		__m256i valuesEven = _mm256_set_epi64x(0, 2, 4, 6);
+		__m256i valuesOdd = _mm256_set_epi64x(1, 3, 5, 7);
 		for (const auto* end = aPtr + _taskSizeBytes; aPtr != end; aPtr += stride, bPtr += stride)
 		{
-			_mm256_store_si256(reinterpret_cast<__m256i*>(aPtr), sum256);
-			_mm256_store_si256(reinterpret_cast<__m256i*>(bPtr), sum256);
+			_mm256_stream_si256(reinterpret_cast<__m256i*>(aPtr), valuesEven);
+			valuesEven = _mm256_add_epi64(valuesEven, inc);
+
+			_mm256_stream_si256(reinterpret_cast<__m256i*>(bPtr), valuesOdd);
+			valuesOdd = _mm256_add_epi64(valuesOdd, inc);
 		}
 		const auto endTime = std::chrono::high_resolution_clock::now();
 		const auto us = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
@@ -185,30 +182,41 @@ struct Bench {
 
 		static constexpr size_t stride = 256 / 8;
 
-		char8_t buffer2K[2048];
+		//char8_t buffer2K[2048];
 
-		for (const auto* end = aPtr + _taskSizeBytes; aPtr != end;)
+		//for (const auto* end = aPtr + _taskSizeBytes; aPtr != end;)
+		//{
+		//	for (size_t i = 0; i != std::size(buffer2K); i += stride * 2, aPtr += stride * 2)
+		//	{
+		//		_mm_prefetch(reinterpret_cast<char*>(aPtr) + stride * 2, _MM_HINT_T0);
+		//		auto tmp1 = _mm256_load_si256(reinterpret_cast<__m256i*>(aPtr));
+		//		auto tmp2 = _mm256_load_si256(reinterpret_cast<__m256i*>(aPtr) + 1);
+		//		_mm256_store_si256(reinterpret_cast<__m256i*>(buffer2K + i), tmp1);
+		//		_mm256_store_si256(reinterpret_cast<__m256i*>(buffer2K + i) + 1, tmp2);
+
+		//		//auto tmp2 = _mm256_load_si256(reinterpret_cast<__m256i*>(aptr) + 1);
+
+		//		//_mm_prefetch(reinterpret_cast<const char*>(aptr) + 1 * stride, _mm_hint_nta);
+
+		//		//_mm256_store_si256(reinterpret_cast<__m256i*>(bptr) + 1, tmp2);
+		//	}
+
+		//	for (size_t i = 0; i != std::size(buffer2K); i += stride, bPtr += stride)
+		//	{
+		//		auto tmp1 = _mm256_load_si256(reinterpret_cast<__m256i*>(buffer2K + i));
+		//		_mm256_stream_si256(reinterpret_cast<__m256i*>(bPtr), tmp1);
+		//	}
+		//}
+
+		for (const auto* end = aPtr + _taskSizeBytes; aPtr != end; aPtr += stride * 2, bPtr += stride * 2)
 		{
-			for (size_t i = 0; i != std::size(buffer2K); i += stride, aPtr += stride)
-			{
-				auto tmp1 = _mm256_load_si256(reinterpret_cast<__m256i*>(aPtr));
-				_mm256_store_si256(reinterpret_cast<__m256i*>(buffer2K + i), tmp1);
+			_mm_prefetch(reinterpret_cast<char*>(aPtr) + stride * 2, _MM_HINT_T0);
 
-				//auto tmp2 = _mm256_load_si256(reinterpret_cast<__m256i*>(aPtr) + 1);
-
-				//_mm_prefetch(reinterpret_cast<const char*>(aPtr) + 1 * stride, _MM_HINT_NTA);
-
-				//_mm256_store_si256(reinterpret_cast<__m256i*>(bPtr) + 1, tmp2);
-			}
-
-			for (size_t i = 0; i != std::size(buffer2K); i += stride, bPtr += stride)
-			{
-				auto tmp1 = _mm256_load_si256(reinterpret_cast<__m256i*>(buffer2K + i));
-				_mm256_store_si256(reinterpret_cast<__m256i*>(bPtr), tmp1);
-			}
+			_mm256_stream_si256(reinterpret_cast<__m256i*>(bPtr),     _mm256_load_si256(reinterpret_cast<__m256i*>(aPtr)));
+			_mm256_stream_si256(reinterpret_cast<__m256i*>(bPtr) + 1, _mm256_load_si256(reinterpret_cast<__m256i*>(aPtr) + 1));
 		}
 
-		//memcpy(bPtr, aPtr, _taskSize * sizeof(size_t));
+		//memcpy(bPtr, aPtr, _taskSizeBytes);
 
 		const auto endTime = std::chrono::high_resolution_clock::now();
 		const auto us = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
@@ -274,10 +282,10 @@ int main()
 		std::cout << std::fixed << std::setprecision(1);
 
 		std::cout << "----------------------------------------------" << '\n';
-		std::cout << "Read\t\t" << "Write\t\t" << "Copy\t\t" << '\n';
+		std::cout << "Write\t\t" << "Read\t\t" << "Copy\t\t" << '\n';
 		std::cout << "----------------------------------------------" << '\n';
-		std::cout << (float)bench.runReadBenchmark() / 1024.0f << " GiB/s\t";
 		std::cout << (float)bench.runWriteBenchmark() / 1024.0f << " GiB/s\t";
+		std::cout << (float)bench.runReadBenchmark() / 1024.0f << " GiB/s\t";
 		std::cout << (float)bench.runCopyBenchmark() / 1024.0f << " GiB/s\t";
 		std::cout << '\n';
 		std::cout << "----------------------------------------------" << '\n';
