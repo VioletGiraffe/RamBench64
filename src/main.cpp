@@ -1,3 +1,5 @@
+#include "cpuid-parser/cpuinfo.hpp"
+
 #include <chrono>
 #include <iomanip>
 #include <iostream>
@@ -91,13 +93,19 @@ struct Bench {
 		const char8_t* __restrict bPtr = _b.get();
 
 		__m128i sum{ 0 };
-		for (const auto* end = aPtr + _taskSizeBytes; aPtr != end; aPtr += stride, bPtr += stride)
+		for (const auto* end = aPtr + _taskSizeBytes; aPtr != end; aPtr += stride * 2, bPtr += stride * 2)
 		{
+			_mm_prefetch(reinterpret_cast<const char*>(aPtr) + stride * 4, _MM_HINT_T0);
+
 			auto a128 = _mm_load_si128(reinterpret_cast<const __m128i*>(aPtr));
 			auto b128 = _mm_load_si128(reinterpret_cast<const __m128i*>(bPtr));
 
-			sum = _mm_add_epi64(sum, a128);
-			sum = _mm_add_epi64(sum, b128);
+
+			auto c128 = _mm_load_si128(reinterpret_cast<const __m128i*>(aPtr) + 1);
+			auto d128 = _mm_load_si128(reinterpret_cast<const __m128i*>(bPtr) + 1);
+
+			sum = _mm_add_epi64(sum, _mm_add_epi64(a128, b128));
+			sum = _mm_add_epi64(sum, _mm_add_epi64(c128, d128));
 		}
 		const auto endTime = std::chrono::high_resolution_clock::now();
 		const auto us = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
@@ -159,11 +167,17 @@ struct Bench {
 
 		static constexpr size_t stride = 128 / 8;
 
-		__m128i sum = _mm_set1_epi64x(_result);
+		const __m128i inc = _mm_set1_epi64x(4);
+
+		__m128i valuesEven = _mm_set_epi64x(0, 2);
+		__m128i valuesOdd = _mm_set_epi64x(1, 3);
 		for (const auto* end = aPtr + _taskSizeBytes; aPtr != end; aPtr += stride, bPtr += stride)
 		{
-			_mm_storeu_si128(reinterpret_cast<__m128i*>(aPtr), sum);
-			_mm_storeu_si128(reinterpret_cast<__m128i*>(bPtr), sum);
+			_mm_stream_si128(reinterpret_cast<__m128i*>(aPtr), valuesEven);
+			valuesEven = _mm_add_epi64(valuesEven, inc);
+
+			_mm_stream_si128(reinterpret_cast<__m128i*>(bPtr), valuesOdd);
+			valuesOdd = _mm_add_epi64(valuesOdd, inc);
 		}
 		const auto endTime = std::chrono::high_resolution_clock::now();
 		const auto us = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
@@ -182,32 +196,6 @@ struct Bench {
 		auto* __restrict bPtr = _b.get();
 
 		static constexpr size_t stride = 256 / 8;
-
-		//char8_t buffer2K[2048];
-
-		//for (const auto* end = aPtr + _taskSizeBytes; aPtr != end;)
-		//{
-		//	for (size_t i = 0; i != std::size(buffer2K); i += stride * 2, aPtr += stride * 2)
-		//	{
-		//		_mm_prefetch(reinterpret_cast<char*>(aPtr) + stride * 2, _MM_HINT_T0);
-		//		auto tmp1 = _mm256_load_si256(reinterpret_cast<__m256i*>(aPtr));
-		//		auto tmp2 = _mm256_load_si256(reinterpret_cast<__m256i*>(aPtr) + 1);
-		//		_mm256_store_si256(reinterpret_cast<__m256i*>(buffer2K + i), tmp1);
-		//		_mm256_store_si256(reinterpret_cast<__m256i*>(buffer2K + i) + 1, tmp2);
-
-		//		//auto tmp2 = _mm256_load_si256(reinterpret_cast<__m256i*>(aptr) + 1);
-
-		//		//_mm_prefetch(reinterpret_cast<const char*>(aptr) + 1 * stride, _mm_hint_nta);
-
-		//		//_mm256_store_si256(reinterpret_cast<__m256i*>(bptr) + 1, tmp2);
-		//	}
-
-		//	for (size_t i = 0; i != std::size(buffer2K); i += stride, bPtr += stride)
-		//	{
-		//		auto tmp1 = _mm256_load_si256(reinterpret_cast<__m256i*>(buffer2K + i));
-		//		_mm256_stream_si256(reinterpret_cast<__m256i*>(bPtr), tmp1);
-		//	}
-		//}
 
 		for (const auto* end = aPtr + _taskSizeBytes; aPtr != end; aPtr += stride * 2, bPtr += stride * 2)
 		{
@@ -239,11 +227,10 @@ struct Bench {
 
 		for (const auto* end = aPtr + _taskSizeBytes; aPtr != end; aPtr += stride * 2, bPtr += stride * 2)
 		{
-			auto tmp1 = _mm_load_si128(reinterpret_cast<__m128i*>(aPtr));
-			auto tmp2 = _mm_load_si128(reinterpret_cast<__m128i*>(aPtr) + 1);
+			_mm_prefetch(reinterpret_cast<char*>(aPtr) + stride * 2, _MM_HINT_T0);
 
-			_mm_store_si128(reinterpret_cast<__m128i*>(bPtr), tmp1);
-			_mm_store_si128(reinterpret_cast<__m128i*>(bPtr) + 1, tmp2);
+			_mm_stream_si128(reinterpret_cast<__m128i*>(bPtr), _mm_load_si128(reinterpret_cast<__m128i*>(aPtr)));
+			_mm_stream_si128(reinterpret_cast<__m128i*>(bPtr) + 1, _mm_load_si128(reinterpret_cast<__m128i*>(aPtr) + 1));
 		}
 
 		const auto endTime = std::chrono::high_resolution_clock::now();
@@ -291,6 +278,9 @@ int main()
 {
 	bool success = false;
 	try {
+		CPUInfo cpuInfo;
+		std::cout << "Running on " << cpuInfo.model() << '\n';
+
 		Bench bench{ 1000 };
 		std::cout << "Task size: " << bench.taskSizeMib() << " MiB (x2)" << "\n\n";
 		std::cout << std::fixed << std::setprecision(1);
@@ -298,9 +288,9 @@ int main()
 		std::cout << "----------------------------------------------" << '\n';
 		std::cout << "Write\t\t" << "Read\t\t" << "Copy\t\t" << '\n';
 		std::cout << "----------------------------------------------" << '\n';
-		std::cout << bestOfN(bench, &Bench::runWriteBenchmark, 8) / 1024.0f << " GiB/s\t";
-		std::cout << bestOfN(bench, &Bench::runReadBenchmark, 8) / 1024.0f << " GiB/s\t";
-		std::cout << bestOfN(bench, &Bench::runCopyBenchmark, 8) / 1024.0f << " GiB/s\t";
+		std::cout << bestOfN(bench, &Bench::runWriteBenchmarkSSE2, 8) / 1024.0f << " GiB/s\t";
+		std::cout << bestOfN(bench, &Bench::runReadBenchmarkSSE2, 8) / 1024.0f << " GiB/s\t";
+		std::cout << bestOfN(bench, &Bench::runCopyBenchmarkSSE2, 8) / 1024.0f << " GiB/s\t";
 		std::cout << '\n';
 		std::cout << "----------------------------------------------" << '\n';
 
