@@ -285,14 +285,27 @@ int main()
 		std::cout << "Task size: " << bench.taskSizeMib() << " MiB (x2)" << "\n\n";
 		std::cout << std::fixed << std::setprecision(1);
 
-		std::cout << "----------------------------------------------" << '\n';
-		std::cout << "Write\t\t" << "Read\t\t" << "Copy\t\t" << '\n';
-		std::cout << "----------------------------------------------" << '\n';
-		std::cout << bestOfN(bench, &Bench::runWriteBenchmarkSSE2, 8) / 1024.0f << " GiB/s\t";
-		std::cout << bestOfN(bench, &Bench::runReadBenchmarkSSE2, 8) / 1024.0f << " GiB/s\t";
-		std::cout << bestOfN(bench, &Bench::runCopyBenchmarkSSE2, 8) / 1024.0f << " GiB/s\t";
+		std::cout << "---------------------------------------------------" << '\n';
+		std::cout << "\tWrite\t\t" << "Read\t\t" << "Copy\t\t" << '\n';
+		std::cout << "---------------------------------------------------" << '\n';
+		std::cout << "AVX2\t";
+		if (cpuInfo.haveAVX2())
+		{
+			std::cout << bestOfN(bench, &Bench::runWriteBenchmark, 30) / 1024.0f << " GiB/s\t";
+			std::cout << bestOfN(bench, &Bench::runReadBenchmark, 30) / 1024.0f << " GiB/s\t";
+			std::cout << bestOfN(bench, &Bench::runCopyBenchmark, 30) / 1024.0f << " GiB/s\t";
+		}
+		else
+			std::cout << "N/A\t\t" << "N/A\t\t" << "N/A\t\t";
+
 		std::cout << '\n';
-		std::cout << "----------------------------------------------" << '\n';
+
+		std::cout << "SSE2\t";
+		std::cout << bestOfN(bench, &Bench::runWriteBenchmarkSSE2, 30) / 1024.0f << " GiB/s\t";
+		std::cout << bestOfN(bench, &Bench::runReadBenchmarkSSE2, 30) / 1024.0f << " GiB/s\t";
+		std::cout << bestOfN(bench, &Bench::runCopyBenchmarkSSE2, 30) / 1024.0f << " GiB/s\t";
+		std::cout << '\n';
+		std::cout << "---------------------------------------------------" << '\n';
 
 		success = true;
 	}
