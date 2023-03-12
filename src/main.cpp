@@ -53,7 +53,7 @@ struct Bench {
 		const char8_t* __restrict aPtr = _a.get();
 		const char8_t* __restrict bPtr = _b.get();
 
-		if (simdVersion == InstructionSet::AVX2 || simdVersion == InstructionSet::AVX)
+		if (simdVersion == InstructionSet::AVX2)
 		{
 			static constexpr size_t stride = 256 / 8;
 
@@ -103,14 +103,14 @@ struct Bench {
 		const auto endTime = std::chrono::high_resolution_clock::now();
 		const auto us = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
 
+		if (us == 0)
+			return 0;
+
 		// Verifying the result. The formula for sum of all consecutive numbers 1..N is n * (n + 1) / 2
 		const uint64_t N = _taskSizeBytes / sizeof(uint64_t) * 2 - 1 /* there is 0 */;
 		const uint64_t expectedSum = N * (N + 1) / 2;
 		if (expectedSum != _result)
 			throw std::runtime_error("Result verification failed! Memory error or CPU instability?");
-
-		if (us == 0)
-			return 0;
 
 		return _taskSizeBytes * 2 /* A and B*/ * 1'000'000 / (1024 * 1024) / us;
 	}
@@ -143,17 +143,19 @@ struct Bench {
 		{
 			static constexpr size_t stride = 256 / 8;
 
-			const __m256i inc = _mm256_set1_epi64x(8);
+			// AVX1 does not have integer addition, only float / double!
+			const __m256d inc = _mm256_castsi256_pd(_mm256_set1_epi64x(8));
 
-			__m256i valuesEven = _mm256_set_epi64x(0, 2, 4, 6);
-			__m256i valuesOdd = _mm256_set_epi64x(1, 3, 5, 7);
+			__m256d valuesEven = _mm256_castsi256_pd(_mm256_set_epi64x(0, 2, 4, 6));
+			__m256d valuesOdd = _mm256_castsi256_pd(_mm256_set_epi64x(1, 3, 5, 7));
+
 			for (const auto* end = aPtr + _taskSizeBytes; aPtr != end; aPtr += stride, bPtr += stride)
 			{
-				_mm256_store_si256(reinterpret_cast<__m256i*>(aPtr), valuesEven);
-				valuesEven = _mm256_add_epi64(valuesEven, inc);
+				_mm256_store_si256(reinterpret_cast<__m256i*>(aPtr), _mm256_castpd_si256(valuesEven));
+				valuesEven = _mm256_add_pd(valuesEven, inc);
 
-				_mm256_store_si256(reinterpret_cast<__m256i*>(bPtr), valuesOdd);
-				valuesOdd = _mm256_add_epi64(valuesOdd, inc);
+				_mm256_store_si256(reinterpret_cast<__m256i*>(bPtr), _mm256_castpd_si256(valuesOdd));
+				valuesOdd = _mm256_add_pd(valuesOdd, inc);
 			}
 		}
 		else if (simdVersion == InstructionSet::SSE2)
