@@ -2,6 +2,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <stdexcept>
 
 #include <stdlib.h>
 #include <string.h>
@@ -31,10 +32,10 @@ struct Bench {
 		_b{ reinterpret_cast<char8_t*>(malloc_aligned(_taskSizeBytes, 256 / 8)), &free_aligned }
 	{
 		if (!_a || !_b)
-			throw std::exception("Failed to allocate memory!");
+			throw std::runtime_error("Failed to allocate memory!");
 
 		if (((size_t)_a.get()) % (256 / 8) != 0 || ((size_t)_b.get()) % (256 / 8) != 0)
-			throw std::exception("Memory not aligned!");
+			throw std::runtime_error("Memory not aligned!");
 
 		// Init the memory - required for the OS to actually allocate all the pages!
 		::memset(_a.get(), 0xAA, _taskSizeBytes);
@@ -72,7 +73,7 @@ struct Bench {
 		const uint64_t N = _taskSizeBytes / sizeof(uint64_t) * 2 - 1 /* there is 0 */;
 		const uint64_t expectedSum = N * (N + 1) / 2;
 		if (expectedSum != _result)
-			throw std::exception("Result verification failed! Memory error or CPU instability?");
+			throw std::runtime_error("Result verification failed! Memory error or CPU instability?");
 
 		if (us == 0)
 			return 0;
@@ -111,7 +112,7 @@ struct Bench {
 		const uint64_t N = _taskSizeBytes / sizeof(uint64_t) * 2 - 1 /* there is 0 */;
 		const uint64_t expectedSum = N * (N + 1) / 2;
 		if (expectedSum != _result)
-			throw std::exception("Result verification failed! Memory error or CPU instability?");
+			throw std::runtime_error("Result verification failed! Memory error or CPU instability?");
 
 		if (us == 0)
 			return 0;
@@ -273,6 +274,19 @@ private:
 	uint64_t _result = 0;
 };
 
+static float bestOfN(Bench& bench, size_t (Bench::* method)(), const size_t N)
+{
+	float best = 0.0f;
+	for (size_t i = 0; i < N; ++i)
+	{
+		// Highest value (MiB/s) = best result
+		if (const auto result = (float)(bench.*method)(); result > best)
+			best = result;
+	}
+
+	return best;
+}
+
 int main()
 {
 	bool success = false;
@@ -284,9 +298,9 @@ int main()
 		std::cout << "----------------------------------------------" << '\n';
 		std::cout << "Write\t\t" << "Read\t\t" << "Copy\t\t" << '\n';
 		std::cout << "----------------------------------------------" << '\n';
-		std::cout << (float)bench.runWriteBenchmark() / 1024.0f << " GiB/s\t";
-		std::cout << (float)bench.runReadBenchmark() / 1024.0f << " GiB/s\t";
-		std::cout << (float)bench.runCopyBenchmark() / 1024.0f << " GiB/s\t";
+		std::cout << bestOfN(bench, &Bench::runWriteBenchmark, 8) / 1024.0f << " GiB/s\t";
+		std::cout << bestOfN(bench, &Bench::runReadBenchmark, 8) / 1024.0f << " GiB/s\t";
+		std::cout << bestOfN(bench, &Bench::runCopyBenchmark, 8) / 1024.0f << " GiB/s\t";
 		std::cout << '\n';
 		std::cout << "----------------------------------------------" << '\n';
 
