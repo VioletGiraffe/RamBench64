@@ -297,12 +297,12 @@ int main()
 			std::cout << "N/A\t\t" << "N/A\t\t" << "N/A\t\t";
 		std::cout << '\n';
 
-		std::cout << "AVX\t";
-		if (cpuInfo.haveAVX())
-			runBenchmarkSetAndPrintResults(Bench::AVX);
-		else
-			std::cout << "N/A\t\t" << "N/A\t\t" << "N/A\t\t";
-		std::cout << '\n';
+		//std::cout << "AVX\t";
+		//if (cpuInfo.haveAVX())
+		//	runBenchmarkSetAndPrintResults(Bench::AVX);
+		//else
+		//	std::cout << "N/A\t\t" << "N/A\t\t" << "N/A\t\t";
+		//std::cout << '\n';
 
 		std::cout << "SSE2\t";
 		if (cpuInfo.haveSSE2())
