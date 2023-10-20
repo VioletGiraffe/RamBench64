@@ -49,6 +49,8 @@ linux*|mac*{
 }
 
 SOURCES += \
+    src/bench.cpp \
     src/main.cpp
 
-HEADERS +=
+HEADERS += \
+	src/bench.h
