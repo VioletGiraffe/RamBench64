@@ -4,7 +4,7 @@
 #include <iomanip>
 #include <iostream>
 
-static float bestOfN(Bench& bench, size_t (Bench::* method)(Bench::InstructionSet), const Bench::InstructionSet simdVersion, const size_t N)
+inline float bestOfN(Bench& bench, size_t (Bench::* method)(Bench::InstructionSet), const Bench::InstructionSet simdVersion, const size_t N)
 {
 	float best = 0.0f;
 	for (size_t i = 0; i < N; ++i)
@@ -27,6 +27,9 @@ int main()
 		Bench bench{ 1000 };
 		std::cout << "Task size: " << bench.taskSizeMib() << " MiB (x2)" << "\n\n";
 		std::cout << std::fixed << std::setprecision(1);
+
+		// CPU warm-up
+		bestOfN(bench, &Bench::runWriteBenchmark, Bench::SSE2, 30);
 
 		const auto runBenchmarkSetAndPrintResults = [&bench](Bench::InstructionSet simdVersion) {
 			std::cout << bestOfN(bench, &Bench::runWriteBenchmark, simdVersion, 30) / 1024.0f << " GiB/s\t";
