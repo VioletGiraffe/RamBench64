@@ -24,8 +24,8 @@ struct Bench {
 private:
 	const size_t _taskSizeBytes;
 
-	std::unique_ptr<char8_t, decltype(&free_aligned)> _a;
-	std::unique_ptr<char8_t, decltype(&free_aligned)> _b;
+	std::unique_ptr<std::byte, decltype(&free_aligned)> _a;
+	std::unique_ptr<std::byte, decltype(&free_aligned)> _b;
 
 	uint64_t _result = 0;
 };

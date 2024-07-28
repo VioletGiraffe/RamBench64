@@ -21,8 +21,8 @@ static constexpr size_t MemoryAlignment = 512 / 8;
 
 Bench::Bench(const size_t megabytes) :
 	_taskSizeBytes{ megabytes * 1024 * 1024 },
-	_a{ reinterpret_cast<char8_t*>(malloc_aligned(_taskSizeBytes, MemoryAlignment)), &free_aligned },
-	_b{ reinterpret_cast<char8_t*>(malloc_aligned(_taskSizeBytes, MemoryAlignment)), &free_aligned }
+	_a{ reinterpret_cast<std::byte*>(malloc_aligned(_taskSizeBytes, MemoryAlignment)), &free_aligned },
+	_b{ reinterpret_cast<std::byte*>(malloc_aligned(_taskSizeBytes, MemoryAlignment)), &free_aligned }
 {
 	if (!_a || !_b)
 		throw std::runtime_error("Failed to allocate memory!");
@@ -39,8 +39,8 @@ size_t Bench::runReadBenchmark(const InstructionSet simdVersion)
 {
 	const auto startTime = std::chrono::high_resolution_clock::now();
 
-	const char8_t* __restrict aPtr = _a.get();
-	const char8_t* __restrict bPtr = _b.get();
+	const std::byte* __restrict aPtr = _a.get();
+	const std::byte* __restrict bPtr = _b.get();
 
 	if (simdVersion == InstructionSet::AVX2)
 	{
@@ -187,7 +187,7 @@ size_t Bench::runCopyBenchmark(const InstructionSet simdVersion)
 
 		for (const auto* end = aPtr + _taskSizeBytes; aPtr != end; aPtr += stride * 2, bPtr += stride * 2)
 		{
-			_mm_prefetch(reinterpret_cast<char*>(aPtr) + stride * 2, _MM_HINT_T0);
+			_mm_prefetch(reinterpret_cast<const char*>(aPtr) + stride * 2, _MM_HINT_T0);
 
 			_mm256_stream_si256(reinterpret_cast<__m256i*>(bPtr), _mm256_load_si256(reinterpret_cast<__m256i*>(aPtr)));
 			_mm256_stream_si256(reinterpret_cast<__m256i*>(bPtr) + 1, _mm256_load_si256(reinterpret_cast<__m256i*>(aPtr) + 1));
@@ -199,7 +199,7 @@ size_t Bench::runCopyBenchmark(const InstructionSet simdVersion)
 
 		for (const auto* end = aPtr + _taskSizeBytes; aPtr != end; aPtr += stride * 2, bPtr += stride * 2)
 		{
-			_mm_prefetch(reinterpret_cast<char*>(aPtr) + stride * 2, _MM_HINT_T0);
+			_mm_prefetch(reinterpret_cast<const char*>(aPtr) + stride * 2, _MM_HINT_T0);
 
 			_mm256_store_si256(reinterpret_cast<__m256i*>(bPtr), _mm256_load_si256(reinterpret_cast<__m256i*>(aPtr)));
 			_mm256_store_si256(reinterpret_cast<__m256i*>(bPtr) + 1, _mm256_load_si256(reinterpret_cast<__m256i*>(aPtr) + 1));
@@ -211,7 +211,7 @@ size_t Bench::runCopyBenchmark(const InstructionSet simdVersion)
 
 		for (const auto* end = aPtr + _taskSizeBytes; aPtr != end; aPtr += stride * 2, bPtr += stride * 2)
 		{
-			_mm_prefetch(reinterpret_cast<char*>(aPtr) + stride * 2, _MM_HINT_T0);
+			_mm_prefetch(reinterpret_cast<const char*>(aPtr) + stride * 2, _MM_HINT_T0);
 
 			_mm_stream_si128(reinterpret_cast<__m128i*>(bPtr), _mm_load_si128(reinterpret_cast<__m128i*>(aPtr)));
 			_mm_stream_si128(reinterpret_cast<__m128i*>(bPtr) + 1, _mm_load_si128(reinterpret_cast<__m128i*>(aPtr) + 1));
