@@ -17,15 +17,17 @@ inline void* malloc_aligned(size_t size, size_t alignment) noexcept
 #endif
 }
 
+static constexpr size_t MemoryAlignment = 512 / 8;
+
 Bench::Bench(const size_t megabytes) :
 	_taskSizeBytes{ megabytes * 1024 * 1024 },
-	_a{ reinterpret_cast<char8_t*>(malloc_aligned(_taskSizeBytes, 256 / 8)), &free_aligned },
-	_b{ reinterpret_cast<char8_t*>(malloc_aligned(_taskSizeBytes, 256 / 8)), &free_aligned }
+	_a{ reinterpret_cast<char8_t*>(malloc_aligned(_taskSizeBytes, MemoryAlignment)), &free_aligned },
+	_b{ reinterpret_cast<char8_t*>(malloc_aligned(_taskSizeBytes, MemoryAlignment)), &free_aligned }
 {
 	if (!_a || !_b)
 		throw std::runtime_error("Failed to allocate memory!");
 
-	if (((size_t)_a.get()) % (256 / 8) != 0 || ((size_t)_b.get()) % (256 / 8) != 0)
+	if (((size_t)_a.get()) % MemoryAlignment != 0 || ((size_t)_b.get()) % MemoryAlignment != 0)
 		throw std::runtime_error("Memory not aligned!");
 
 	// Init the memory - required for the OS to actually allocate all the pages!
