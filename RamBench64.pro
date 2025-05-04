@@ -49,8 +49,17 @@ linux*|mac*{
 }
 
 SOURCES += \
-    src/bench.cpp \
-    src/main.cpp
+	src/bench.cpp \
+	src/main.cpp
 
 HEADERS += \
-	src/bench.h
+	src/bench.h \
+	src/system_info.h
+
+win*{
+	SOURCES += \
+		src/system_info_win.cpp
+} else {
+	SOURCES += \
+		src/system_info_unix.cpp
+}

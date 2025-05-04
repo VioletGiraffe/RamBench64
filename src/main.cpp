@@ -1,8 +1,10 @@
 #include "cpuid-parser/cpuinfo.hpp"
 #include "bench.h"
+#include "system_info.h"
 
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 
 inline float bestOfN(Bench& bench, size_t (Bench::* method)(Bench::InstructionSet), const Bench::InstructionSet simdVersion, const size_t N)
 {
@@ -23,6 +25,33 @@ int main()
 	try {
 		CPUInfo cpuInfo;
 		std::cout << "Running on " << cpuInfo.model() << '\n';
+
+		const auto ramInfo = queryMemoryInfo();
+		if (!ramInfo.empty())
+		{
+			std::cout << "RAM info (per module):\n";
+			// Format as a table
+			std::cout << std::left << std::setw(20) << "Bank" << std::setw(20) << "Manufacturer" << std::setw(26) << "Model" << std::setw(10) << "Capacity" << std::setw(15) << "Module speed" << std::setw(15) << "Actual Clock (MT/s)" << '\n';
+			for (const auto& info : ramInfo)
+			{
+				std::ostringstream capacity;
+				capacity << std::setprecision(2) << (info.capacity / (1024.0f * 1024.0f * 1024.0f)) << " GiB";
+
+				std::ostringstream moduleSpeed;
+				moduleSpeed << "DDR" << info.ddrStandardNumber << "-" << info.moduleMaxSpeed;
+
+				std::cout << std::left
+					<< std::setw(20) << info.bank
+					<< std::setw(20) << info.manufacturer
+					<< std::setw(26) << info.model
+					<< std::setw(10) << capacity.str()
+					<< std::setw(15) << moduleSpeed.str()
+					<< std::setw(15) << info.clock
+					<< '\n';
+			}
+		}
+		else
+			std::cout << "RAM: Information not available.\n";
 
 		Bench bench{ 1000 };
 		std::cout << "Task size: " << bench.taskSizeMib() << " MiB (x2)" << "\n\n";
